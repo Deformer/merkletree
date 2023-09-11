@@ -11,12 +11,12 @@ import (
 	"testing"
 )
 
-//TestSHA256Content implements the Content interface provided by merkletree and represents the content stored in the tree.
+// TestSHA256Content implements the Content interface provided by merkletree and represents the content stored in the tree.
 type TestSHA256Content struct {
 	x string
 }
 
-//CalculateHash hashes the values of a TestSHA256Content
+// CalculateHash hashes the values of a TestSHA256Content
 func (t TestSHA256Content) CalculateHash() ([]byte, error) {
 	h := sha256.New()
 	if _, err := h.Write([]byte(t.x)); err != nil {
@@ -26,17 +26,17 @@ func (t TestSHA256Content) CalculateHash() ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
-//Equals tests for equality of two Contents
+// Equals tests for equality of two Contents
 func (t TestSHA256Content) Equals(other Content) (bool, error) {
 	return t.x == other.(TestSHA256Content).x, nil
 }
 
-//TestContent implements the Content interface provided by merkletree and represents the content stored in the tree.
+// TestContent implements the Content interface provided by merkletree and represents the content stored in the tree.
 type TestMD5Content struct {
 	x string
 }
 
-//CalculateHash hashes the values of a TestContent
+// CalculateHash hashes the values of a TestContent
 func (t TestMD5Content) CalculateHash() ([]byte, error) {
 	h := md5.New()
 	if _, err := h.Write([]byte(t.x)); err != nil {
@@ -46,7 +46,7 @@ func (t TestMD5Content) CalculateHash() ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
-//Equals tests for equality of two Contents
+// Equals tests for equality of two Contents
 func (t TestMD5Content) Equals(other Content) (bool, error) {
 	return t.x == other.(TestMD5Content).x, nil
 }
@@ -630,7 +630,7 @@ func TestMerkleTree_MerklePath(t *testing.T) {
 		for j := 0; j < len(table[i].contents); j++ {
 			merklePath, index, _ := tree.GetMerklePath(table[i].contents[j])
 
-			hash, err := tree.Leafs[j].calculateNodeHash(false)
+			hash, err := tree.Leafs[j].buildHash(false)
 			if err != nil {
 				t.Errorf("[case:%d] error: calculateNodeHash error: %v", table[i].testCaseId, err)
 			}
@@ -656,5 +656,49 @@ func TestMerkleTree_MerklePath(t *testing.T) {
 				t.Errorf("[case:%d] error: expected hash equal to %v got %v", table[i].testCaseId, hash, tree.MerkleRoot())
 			}
 		}
+	}
+}
+
+// We have the following tree:
+//
+//                                   1. Root
+//                             ________|_________
+//                            /                   \
+//                  2. Hash(Hash(a)+Hash(b))   3. Hash(Hash(c)+Hash(d))
+//                     _______|_______          ________|_______
+//                    /               \       /                 \
+//             4. Hash(a)        5. Hash(b)  6. Hash(c)         7. Hash(d)
+//
+// Than we need to proff that a and b is the part of the tree without revealing c and d,
+// so we could use a, b and node number 3 to proof it
+
+func TestMerkleTree_MerkleProof(t *testing.T) {
+	originaLeafsContent := []Content{TestSHA256Content{x: "a"}, TestSHA256Content{x: "b"}, TestSHA256Content{x: "c"}, TestSHA256Content{x: "d"}}
+	originalMerkleTree, err := NewTree(originaLeafsContent)
+	if err != nil {
+		t.Errorf("error: unexpected error: %v", err)
+	}
+	originalMerkleRoot := originalMerkleTree.Root.Hash
+	proofNode := originalMerkleTree.Root.Right
+
+	proofMerkleLeadsContent := []Content{TestSHA256Content{x: "a"}, TestSHA256Content{x: "b"}, TestSHA256Content{x: "sealed"}, TestSHA256Content{x: "sealed"}}
+	proofMerkleTree, err := NewTree(proofMerkleLeadsContent)
+	if err != nil {
+		t.Errorf("error: unexpected error: %v", err)
+	}
+	*proofMerkleTree.Root.Right = Node{
+		Tree:   originalMerkleTree,
+		Parent: proofNode.Parent,
+		Left:   nil,
+		Right:  nil,
+		Hash:   proofNode.Hash,
+	}
+	merkleRootFromProof, err := proofMerkleTree.CalculateMerkleRoot()
+	if err != nil {
+		t.Errorf("error: unexpected error: %v", err)
+	}
+
+	if bytes.Compare(originalMerkleRoot, merkleRootFromProof) != 0 {
+		t.Errorf("error: expected hash equal to %v got %v", originalMerkleRoot, merkleRootFromProof)
 	}
 }
