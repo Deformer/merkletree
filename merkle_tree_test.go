@@ -661,37 +661,62 @@ func TestMerkleTree_MerklePath(t *testing.T) {
 
 // We have the following tree:
 //
-//                                   1. Root
-//                             ________|_________
-//                            /                   \
-//                  2. Hash(Hash(a)+Hash(b))   3. Hash(Hash(c)+Hash(d))
-//                     _______|_______          ________|_______
-//                    /               \       /                 \
-//             4. Hash(a)        5. Hash(b)  6. Hash(c)         7. Hash(d)
+//                                             1. Root
+//                           ______________________|_______________________
+//                         /                                                \
+//              2. Hash(Hash(a+b)+Hash(c+d))                     3. Hash(Hash(e+f)+Hash(g+k))
+//               _________|__________                             _________|__________
+//              /                    \                          /                      \
+//        4. Hash(a+b)          5. Hash(c+d)               6. Hash(e+f)            7. Hash(g+k)
+//        ___|___                ___|___                    ___|___                ___|___
+//       /       \              /       \                  /       \              /       \
+//  8.Hash(a)  9.Hash(b)   10.Hash(c)  11.Hash(d)     12.Hash(e)  13. Hash(f)  14.Hash(g) 15.Hash(k)
 //
-// Than we need to proff that a and b is the part of the tree without revealing c and d,
-// so we could use a, b and node number 3 to proof it
+// If we e need to proof that a, b, e, f is the part of the tree without revealing c, d, g and k
+// we could use a, b, e, f, hash(c+d) node number 5 and hash(g+k) node number 7 to proof it
 
 func TestMerkleTree_MerkleProof(t *testing.T) {
-	originaLeafsContent := []Content{TestSHA256Content{x: "a"}, TestSHA256Content{x: "b"}, TestSHA256Content{x: "c"}, TestSHA256Content{x: "d"}}
+	originaLeafsContent := []Content{
+		TestSHA256Content{x: "a"},
+		TestSHA256Content{x: "b"},
+		TestSHA256Content{x: "c"},
+		TestSHA256Content{x: "d"},
+		TestSHA256Content{x: "e"},
+		TestSHA256Content{x: "f"},
+		TestSHA256Content{x: "g"},
+		TestSHA256Content{x: "k"},
+	}
 	originalMerkleTree, err := NewTree(originaLeafsContent)
 	if err != nil {
 		t.Errorf("error: unexpected error: %v", err)
 	}
 	originalMerkleRoot := originalMerkleTree.Root.Hash
-	proofNode := originalMerkleTree.Root.Right
+	proofNodeCD := originalMerkleTree.Root.Left.Right
+	proofNodeGK := originalMerkleTree.Root.Right.Right
 
-	proofMerkleLeadsContent := []Content{TestSHA256Content{x: "a"}, TestSHA256Content{x: "b"}, TestSHA256Content{x: "sealed"}, TestSHA256Content{x: "sealed"}}
+	proofMerkleLeadsContent := []Content{
+		TestSHA256Content{x: "a"},
+		TestSHA256Content{x: "b"},
+		TestSHA256Content{x: "sealed"},
+		TestSHA256Content{x: "sealed"},
+		TestSHA256Content{x: "e"},
+		TestSHA256Content{x: "f"},
+		TestSHA256Content{x: "sealed"},
+		TestSHA256Content{x: "sealed"},
+	}
 	proofMerkleTree, err := NewTree(proofMerkleLeadsContent)
 	if err != nil {
 		t.Errorf("error: unexpected error: %v", err)
 	}
-	*proofMerkleTree.Root.Right = Node{
+	*proofMerkleTree.Root.Left.Right = Node{
 		Tree:   originalMerkleTree,
-		Parent: proofNode.Parent,
-		Left:   nil,
-		Right:  nil,
-		Hash:   proofNode.Hash,
+		Parent: proofNodeCD.Parent,
+		Hash:   proofNodeCD.Hash,
+	}
+	*proofMerkleTree.Root.Right.Right = Node{
+		Tree:   originalMerkleTree,
+		Parent: proofNodeGK.Parent,
+		Hash:   proofNodeGK.Hash,
 	}
 	merkleRootFromProof, err := proofMerkleTree.CalculateMerkleRoot()
 	if err != nil {
